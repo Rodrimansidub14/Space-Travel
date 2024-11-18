@@ -1,9 +1,16 @@
 // src/camera.rs
 
-use nalgebra_glm::{Vec3, rotate_vec3,Mat3};
+use nalgebra_glm::{Vec3, rotate_vec3,Mat3, lerp};
 use std::f32::consts::PI;
-
 /// Estructura que representa la cámara en el espacio 3D
+
+pub enum CameraMode {
+    Free,               // Modo libre: orbita, drag, zoom
+    Fixed {             // Modo fijo en un planeta
+        target_index: usize, // Índice del planeta objetivo
+        angle: f32,          // Ángulo de rotación alrededor del planeta
+    },
+}
 pub struct Camera {
     pub eye: Vec3,
     pub center: Vec3,
@@ -22,6 +29,7 @@ impl Camera {
             up,
             has_changed: true,
             target:None,
+            
         }
     }
     pub fn follow(&mut self, target_position: Vec3) {
@@ -106,4 +114,10 @@ impl Camera {
             false
         }
     }
+    pub fn interpolate_to(&mut self, target_eye: Vec3, target_center: Vec3, t: f32) {
+        self.eye = lerp(&self.eye, &target_eye, t);
+        self.center = lerp(&self.center, &target_center, t);
+        self.has_changed = true;
+    }
+
 }

@@ -64,14 +64,44 @@ impl Framebuffer {
     pub fn set_current_color(&mut self, color: u32) {
         self.current_color = color;
     }
-    
+    /// Aplica un overlay oscuro con intensidad variable
+    pub fn apply_overlay(&mut self, intensity: f32) {
+        // Asegúrate de que la operación de overlay sea eficiente y no cree nuevas estructuras enormes
+        for pixel in &mut self.buffer {
+            // Suponiendo que intensity es entre 0.0 y 1.0
+            let overlay_color = 0x000000; // Negro
+            *pixel = blend_colors(*pixel, overlay_color, intensity);
+        }
+    }
 }
+
+// Función para mezclar colores
+fn blend_colors(base: u32, overlay: u32, intensity: f32) -> u32 {
+    // Extrae componentes RGB
+    let base_r = ((base >> 16) & 0xFF) as f32;
+    let base_g = ((base >> 8) & 0xFF) as f32;
+    let base_b = (base & 0xFF) as f32;
+
+    let overlay_r = ((overlay >> 16) & 0xFF) as f32;
+    let overlay_g = ((overlay >> 8) & 0xFF) as f32;
+    let overlay_b = (overlay & 0xFF) as f32;
+
+    // Mezcla los colores
+    let final_r = (base_r * (1.0 - intensity) + overlay_r * intensity).min(255.0) as u32;
+    let final_g = (base_g * (1.0 - intensity) + overlay_g * intensity).min(255.0) as u32;
+    let final_b = (base_b * (1.0 - intensity) + overlay_b * intensity).min(255.0) as u32;
+
+    (final_r << 16) | (final_g << 8) | final_b
+}
+
+
 pub fn post_process(framebuffer: &mut Framebuffer) {
     for i in 0..framebuffer.buffer.len() {
         let emissive = framebuffer.emissive_buffer[i];
         let final_color = blend_add(framebuffer.buffer[i], emissive);
         framebuffer.buffer[i] = final_color;
     }
+    
 }
 
 // Función para mezclar colores usando blend add

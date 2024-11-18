@@ -12,6 +12,8 @@ mod color;
 mod fragment;
 mod shaders;
 mod camera;
+
+
 mod uniforms;
 mod renderer;
 mod orbital;
@@ -28,16 +30,14 @@ use fragment::CelestialType;
 use uniforms::Uniforms;
 use orbital::{OrbitalElements, CelestialBody, CelestialBodyEnum, BodyManager};
 use noise::{create_noise_star, create_noise_planet, create_noise_gas_giant, create_noise_moon, create_noise_comet, create_noise_nebula}; // Añadido
-
+// Importa ParticleSystem si es necesario
 const SIZE_SCALE: f32 = 1.0;
-const DISTANCE_SCALE: f32 = 50.0;
+const DISTANCE_SCALE: f32 = 1.0;
 // Función para crear la matriz de modelo
 fn create_model_matrix(translation: Vec3, scale: f32, rotation: Vec3) -> Mat4 {
     let scaled_scale = scale * SIZE_SCALE;
     let scaled_translation = translation * DISTANCE_SCALE;
-    let mut is_dragging = false;
-    let mut last_mouse_pos = (0.0, 0.0);
-    
+
     // Matriz de escala
     let scale_matrix = Mat4::new_scaling(scaled_scale);
 
@@ -48,13 +48,11 @@ fn create_model_matrix(translation: Vec3, scale: f32, rotation: Vec3) -> Mat4 {
 
     let rotation_matrix = rotation_z * rotation_y * rotation_x;
 
-    // Matriz de traslación
+    // Matriz de traslación basada en la posición orbital
     let translation_matrix = Mat4::new_translation(&scaled_translation);
 
-    // Matriz de modelo: traslación * rotación * escala
-    let model_matrix = translation_matrix * rotation_matrix * scale_matrix;
-
-    model_matrix
+    // Combinamos todas las matrices
+    translation_matrix * rotation_matrix * scale_matrix
 }
 
 
@@ -156,7 +154,7 @@ fn handle_input(
     last_mouse_pos: &mut (f32, f32),
 ) {
     let rotation_speed = 0.005;
-    let zoom_speed = 0.5; // Ajusta este valor para controlar la sensibilidad del zoom
+    let zoom_speed = 0.35; // Ajusta este valor para controlar la sensibilidad del zoom
 
     // Manejar el arrastre del mouse para rotar la cámara
     if window.get_mouse_down(MouseButton::Left) {
@@ -187,18 +185,7 @@ fn handle_input(
     let rotation_speed_keyboard = 0.05;
 
     // Cambiar al siguiente cuerpo celeste al presionar 'N'
-    if window.is_key_down(Key::N) {
-        body_manager.next();
-    }
 
-    // Zoom In y Zoom Out con teclas 'Z' y 'X'
-    if window.is_key_down(Key::Z) {
-        body_manager.zoom_in();
-    }
-
-    if window.is_key_down(Key::X) {
-        body_manager.zoom_out();
-    }
 
     // Rotación de la cámara con las teclas de flecha
     if window.is_key_down(Key::Up) {
@@ -242,6 +229,7 @@ fn handle_input(
         camera.stop_following();
     }
 }
+
 fn main() {
     let window_width = 800;
     let window_height = 600;
@@ -308,6 +296,8 @@ fn main() {
     let comet_obj = Obj::load("assets/models/planet.obj").expect("Failed to load comet.obj");
     let comet_vertex_array = comet_obj.get_vertex_array();
     let mut time = 0.0; // Usar f32 para mayor precisión en cálculos de tiempo
+    let spaceship_obj = Obj::load("assets/models/ship.obj").expect("Failed to load ship.obj");
+    let spaceship_vertex_array = spaceship_obj.get_vertex_array();
 
     // Inicializar BodyManager
     let mut body_manager = BodyManager::new(
@@ -329,19 +319,23 @@ fn main() {
 
     // src/main.rs
 
-// Dentro del ciclo principal de renderizado en main()
-// Dentro del ciclo principal de renderizado en main()
 
-// Dentro del ciclo principal de renderizado en main()
-
-// Dentro del ciclo principal de renderizado en main()
 
 while window.is_open() && !window.is_key_down(Key::Escape) {
     // Actualizar el tiempo
     time += 0.016; // Aproximadamente 60 FPS
 
     // Manejar entradas
-    handle_input(&window, &mut camera, &mut body_manager, time, &mut is_dragging, &mut last_mouse_pos);
+    handle_input(
+        &window,
+        &mut camera,
+        &mut body_manager,
+        time,
+        &mut is_dragging,
+        &mut last_mouse_pos,
+    );
+
+    // Actualizar la posición de la nave
 
     // Limpiar el framebuffer
     framebuffer.clear();
@@ -379,6 +373,45 @@ while window.is_open() && !window.is_key_down(Key::Escape) {
         star.ring_rotation_matrix,
     );
 
+
+    for body in &body_manager.all_bodies {
+        // Obtener la posición actual del cuerpo
+        let position = body_manager.get_body_position(body, time);
+        
+        // Calcular la dirección de la luz (desde el planeta hacia el sol)
+        let light_direction = (-position).normalize(); // Suponiendo que el sol está en (0,0,0)
+        
+        // Crear la matriz de modelo con la posición y rotación propia
+        let model_matrix = create_model_matrix(position, body.scale, body.rotation);
+        
+        // Crear las uniformes necesarias para el shader
+        let uniforms = Uniforms::new(
+            model_matrix,
+            view_matrix,
+            projection_matrix,
+            viewport_matrix,
+            time,
+            body.noise.clone(),
+            light_direction, // Actualizado dinámicamente
+            body.noise_scale,
+            body.ocean_threshold,
+            body.continent_threshold,
+            body.mountain_threshold,
+            body.snow_threshold,
+            body.ring_inner_radius,
+            body.ring_outer_radius,
+            body.ring_color,
+            body.ring_opacity,
+            body.ring_frequency,
+            body.ring_wave_speed,
+            body.ring_rotation_matrix,
+        );
+        
+        // Renderizar el cuerpo celeste
+        render(&mut framebuffer, &uniforms, &body.obj.get_vertex_array(), body.shader_type);
+    }
+ 
+
     // Renderizar las líneas orbitales como puntos
 // Renderizar las líneas orbitales como puntos, excluyendo la estrella
     for body in &body_manager.all_bodies {
@@ -389,17 +422,24 @@ while window.is_open() && !window.is_key_down(Key::Escape) {
     }
     render(&mut framebuffer, &uniforms, &star_vertex_array, CelestialType::Star);
 
-    // Post-Procesamiento para Emisión (si es necesario)
-    post_process(&mut framebuffer);
+ 
+          // Renderizar las líneas orbitales como puntos, excluyendo la estrella
+          for body in &body_manager.all_bodies {
+              if body.name != "Star" {
+                  let orbital_path = generate_orbital_path(&body.orbital_elements);
+                  render_orbital_points(&mut framebuffer, &orbital_path, &view_matrix, &projection_matrix, &viewport_matrix);
+              }
+          }
 
-    // Actualizar la ventana con el framebuffer
-    window
-        .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
-        .unwrap();
-
-    // Control de la tasa de frames
-    std::thread::sleep(frame_delay);
-}
-
-
-}
+          // Post-Procesamiento para Emisión (si es necesario)
+          post_process(&mut framebuffer);
+  
+          // Actualizar la ventana con el framebuffer
+          window
+              .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
+              .unwrap();
+  
+          // Control de la tasa de frames
+          std::thread::sleep(frame_delay);
+      }
+  }

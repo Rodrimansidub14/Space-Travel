@@ -40,34 +40,46 @@ impl OrbitalElements {
             orbital_period,
         }
     }
-
-    pub fn position_at(&self, time: f32) -> Vec3 {
-        let n = 2.0 * std::f32::consts::PI / self.orbital_period; // Movimiento angular medio
-        let M = self.mean_anomaly + n * time; // Anomalía media
-
-        // Resolver la ecuación de Kepler para la Anomalía Excéntrica (E) usando Iteración de Newton-Raphson
-        let mut E = M;
-        for _ in 0..5 {
-            E = E - (E - self.eccentricity * E.sin() - M) / (1.0 - self.eccentricity * E.cos());
-        }
-
-        // Coordenadas en el plano orbital
-        let x_orb = self.semi_major_axis * (E.cos() - self.eccentricity);
-        let y_orb = self.semi_major_axis * (1.0 - self.eccentricity.powi(2)).sqrt() * E.sin();
-
-        // Vector homogéneo
-        let vec = Vec4::new(x_orb, y_orb, 0.0, 1.0);
-
-        // Matriz de rotación
-        let rotation_matrix = nalgebra_glm::rotation(self.longitude_of_ascending_node, &Vec3::new(0.0, 1.0, 0.0))
-            * nalgebra_glm::rotation(self.inclination, &Vec3::new(1.0, 0.0, 0.0))
-            * nalgebra_glm::rotation(self.argument_of_periapsis, &Vec3::new(0.0, 0.0, 1.0));
-
-        let rotated_vec = rotation_matrix * vec;
-
-        // Extraer Vec3 ignorando el componente w
-        Vec3::new(rotated_vec.x, rotated_vec.y, rotated_vec.z)
+ /// Calcula la anomalía excéntrica usando el método de Newton-Raphson
+ fn eccentric_anomaly(&self, M: f32) -> f32 {
+    let mut E = M;
+    for _ in 0..5 {
+        E = E - (E - self.eccentricity * E.sin() - M) / (1.0 - self.eccentricity * E.cos());
     }
+    E
+}
+
+/// Calcula la anomalía verdadera a partir de la excéntrica
+fn true_anomaly(&self, E: f32) -> f32 {
+    2.0 * (E / 2.0).tan().atan() // Simplificación para pequeñas excentricidades
+}
+
+/// Calcula la posición 3D en un tiempo dado
+pub fn position_at(&self, time: f32) -> Vec3 {
+    let n = 2.0 * std::f32::consts::PI / self.orbital_period; // Movimiento angular medio
+    let M = self.mean_anomaly + n * time; // Anomalía media
+
+    let E = self.eccentric_anomaly(M); // Anomalía excéntrica
+    let ν = self.true_anomaly(E);       // Anomalía verdadera
+
+    // Coordenadas en el plano orbital
+    let r = self.semi_major_axis * (1.0 - self.eccentricity.powi(2)) / (1.0 + self.eccentricity * ν.cos());
+    let x_orb = r * ν.cos();
+    let y_orb = r * ν.sin();
+
+    // Vector homogéneo
+    let vec = Vec4::new(x_orb, y_orb, 0.0, 1.0);
+
+    // Matriz de rotación: ω * i * Ω
+    let rotation_matrix = nalgebra_glm::rotation(self.argument_of_periapsis, &Vec3::new(0.0, 0.0, 1.0))
+        * nalgebra_glm::rotation(self.inclination, &Vec3::new(1.0, 0.0, 0.0))
+        * nalgebra_glm::rotation(self.longitude_of_ascending_node, &Vec3::new(0.0, 1.0, 0.0));
+
+    let rotated_vec = rotation_matrix * vec;
+
+    // Extraer Vec3 ignorando el componente w
+    Vec3::new(rotated_vec.x, rotated_vec.y, rotated_vec.z)
+}
     pub fn position_at_anomaly(&self, true_anomaly: f32) -> Vec3 {
         // Cálculo de la distancia al sol
         let r = self.semi_major_axis * (1.0 - self.eccentricity.powi(2))
@@ -298,7 +310,7 @@ impl BodyManager {
                         0.0,
                         0.0,
                         0.0,
-                        45.0, // orbital_period
+                        65.0, // orbital_period
                     ),
                     0.5, // scale
                     Vec3::new(0.0, 0.0, 0.0), // rotation
@@ -324,13 +336,13 @@ impl BodyManager {
                     ringed_obj,
                     CelestialType::Ringed,
                     OrbitalElements::new(
-                        7.0, // semi_major_axis
+                        10.0, // semi_major_axis
                         0.02, // eccentricity
                         15.0 * std::f32::consts::PI / 180.0, // inclinación
                         0.0, // longitude_of_ascending_node
                         0.0, // argument_of_periapsis
                         0.0, // mean_anomaly
-                        50.0, // orbital_period
+                        35.0, // orbital_period
                     ),
                     0.5, // scale
                     Vec3::new(0.0, 0.0, 0.0), // rotation
@@ -356,16 +368,16 @@ impl BodyManager {
                     rings_obj,
                     CelestialType::Rings,
                     OrbitalElements::new(
-                        7.0, // Same semi_major_axis as Ringed
+                        10.0, // Same semi_major_axis as Ringed
                         0.02, // Same eccentricity
                         15.0 * std::f32::consts::PI / 180.0, // Same inclinación
                         0.0,
                         0.0,
                         0.0,
-                        50.0, // orbital_period
+                        35.0, // orbital_period
                     ),
-                    0.5, // scale (ajusta según el modelo de anillos)
-                    Vec3::new(0.0, 0.0, 0.0), // rotation (ajusta para la inclinación de los anillos)
+                    0.4, // scale (ajusta según el modelo de anillos)
+                    Vec3::new(45.0, 0.0, 25.0), // rotation (ajusta para la inclinación de los anillos)
                     noise_gas_giant.clone(),
                     0.0, // noise_scale (no usado para anillos)
                     0.0, // ocean_threshold
@@ -452,15 +464,15 @@ impl BodyManager {
                     moon_obj,
                     CelestialType::Moon,
                     OrbitalElements::new(
-                        1.0, // semi_major_axis
+                        0.7, // semi_major_axis
                         0.01, // eccentricity
                         5.0 * std::f32::consts::PI / 180.0, // inclinación
                         0.0, // longitude_of_ascending_node
                         0.0, // argument_of_periapsis
                         0.0, // mean_anomaly
-                        5.0, // orbital_period
+                        7.0, // orbital_period
                     ),
-                    0.2, // scale
+                    0.06, // scale
                     Vec3::new(0.0, 0.0, 0.0), // rotation
                     noise_moon.clone(),
                     2.0, // noise_scale
@@ -510,6 +522,7 @@ impl BodyManager {
                     false,      // is_moon
                     "".to_string(), // orbiting_body_name
                 ),
+                
             ],
             current_index: 0,
             zoom_level: 50.0,
