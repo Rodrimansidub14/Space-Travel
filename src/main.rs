@@ -12,12 +12,15 @@ mod color;
 mod fragment;
 mod shaders;
 mod camera;
-
+mod star;    // Añade esta línea
 
 mod uniforms;
 mod renderer;
 mod orbital;
 mod noise; // Añadido
+mod stars; // Añade esta línea
+
+use stars::StarField; // Y esta línea para usar StarField
 
 use framebuffer::{Framebuffer, post_process};
 use vertex::Vertex;
@@ -261,6 +264,7 @@ fn main() {
         Vec3::new(0.0, 0.0, 0.0),  // Center
         Vec3::new(0.0, 1.0, 0.0),  // Up
     );
+    let star_field = StarField::new(1000, 100.0); // 1000 estrellas dentro de un radio de 100 unidades
 
     // Crear generadores de ruido separados para cada cuerpo celeste
     let noise_star = create_noise_star();
@@ -344,6 +348,7 @@ while window.is_open() && !window.is_key_down(Key::Escape) {
         let view_matrix = create_view_matrix(camera.eye, camera.center, camera.up);
         let projection_matrix = create_perspective_matrix(window_width as f32, window_height as f32);
         let viewport_matrix = create_viewport_matrix(framebuffer_width as f32, framebuffer_height as f32);
+
 
     // Definir la dirección de la luz
     let light_direction = Vec3::new(1.0, 1.0, 1.0).normalize();
@@ -430,10 +435,11 @@ while window.is_open() && !window.is_key_down(Key::Escape) {
                   render_orbital_points(&mut framebuffer, &orbital_path, &view_matrix, &projection_matrix, &viewport_matrix);
               }
           }
+          star_field.render(&mut framebuffer, &camera, &projection_matrix, &viewport_matrix);
 
           // Post-Procesamiento para Emisión (si es necesario)
           post_process(&mut framebuffer);
-  
+
           // Actualizar la ventana con el framebuffer
           window
               .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
