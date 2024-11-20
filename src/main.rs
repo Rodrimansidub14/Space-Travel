@@ -13,7 +13,6 @@ mod fragment;
 mod shaders;
 mod camera;
 mod star;    // Añade esta línea
-
 mod uniforms;
 mod renderer;
 mod orbital;
